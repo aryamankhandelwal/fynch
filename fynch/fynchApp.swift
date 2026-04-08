@@ -10,10 +10,11 @@ import SwiftUI
 @main
 struct fynchApp: App {
     @State private var appState = AppState()
+    private let tmdbService = TMDBService(bearerToken: Secrets.tmdbBearerToken)
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(tmdbService: tmdbService)
                 .environment(appState)
         }
     }

@@ -1,57 +1,56 @@
 import SwiftUI
 
+private enum SearchState {
+    case idle
+    case loading
+    case loaded([TMDBSearchResult])
+    case error(String)
+}
+
 struct AddShowView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
-    private var availableShows: [Show] {
-        AppState.catalog.filter { candidate in
-            !appState.shows.contains(where: { $0.id == candidate.id })
-        }
-    }
+    let tmdbService: TMDBService
+
+    @State private var query: String = ""
+    @State private var searchState: SearchState = .idle
+    @State private var searchTask: Task<Void, Never>? = nil
+    @State private var addingShowId: Int? = nil
 
     var body: some View {
         NavigationStack {
             Group {
-                if availableShows.isEmpty {
+                switch searchState {
+                case .idle:
                     ContentUnavailableView(
-                        "All caught up",
-                        systemImage: "checkmark.seal.fill",
-                        description: Text("You're already tracking every show in the catalog.")
+                        "Search for a show",
+                        systemImage: "magnifyingglass",
+                        description: Text("Type a show name above to get started.")
                     )
-                } else {
-                    List(availableShows) { show in
-                        HStack(spacing: 14) {
-                            Circle()
-                                .fill(show.posterColor.gradient)
-                                .frame(width: 40, height: 40)
-                                .overlay {
-                                    Text(show.title.prefix(1))
-                                        .font(.headline.bold())
-                                        .foregroundStyle(.white)
-                                }
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(show.title)
-                                    .font(.headline)
-                                Text(show.genres.prefix(2).joined(separator: ", "))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                case .loading:
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                            Spacer()
-
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(.blue)
-                                .font(.title2)
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            appState.addShow(show)
-                            dismiss()
-                        }
+                case .loaded(let results):
+                    if results.isEmpty {
+                        ContentUnavailableView.search(text: query)
+                    } else {
+                        resultsList(results)
                     }
+
+                case .error(let message):
+                    ContentUnavailableView(
+                        "Something went wrong",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(message)
+                    )
                 }
+            }
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search TV shows")
+            .onChange(of: query) { _, newValue in
+                scheduleSearch(query: newValue)
             }
             .navigationTitle("Add Show")
             .navigationBarTitleDisplayMode(.inline)
@@ -59,6 +58,82 @@ struct AddShowView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
+            }
+        }
+    }
+
+    // MARK: - Results List
+
+    private func resultsList(_ results: [TMDBSearchResult]) -> some View {
+        List(results) { result in
+            HStack(spacing: 14) {
+                let colorIndex = result.id % Show.palette.count
+                Circle()
+                    .fill(Show.palette[colorIndex].gradient)
+                    .frame(width: 40, height: 40)
+                    .overlay {
+                        Text(result.name.prefix(1))
+                            .font(.headline.bold())
+                            .foregroundStyle(.white)
+                    }
+
+                Text(result.name)
+                    .font(.headline)
+
+                Spacer()
+
+                if addingShowId == result.id {
+                    ProgressView()
+                } else {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(.blue)
+                        .font(.title2)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard addingShowId == nil else { return }
+                addShow(result)
+            }
+        }
+    }
+
+    // MARK: - Search
+
+    private func scheduleSearch(query: String) {
+        searchTask?.cancel()
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            searchState = .idle
+            return
+        }
+        searchState = .loading
+        searchTask = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            do {
+                let results = try await tmdbService.searchShows(query: trimmed)
+                let filtered = results.filter { r in
+                    !appState.shows.contains { $0.tmdbId == r.id }
+                }
+                searchState = .loaded(filtered)
+            } catch {
+                searchState = .error(error.localizedDescription)
+            }
+        }
+    }
+
+    // MARK: - Add
+
+    private func addShow(_ result: TMDBSearchResult) {
+        addingShowId = result.id
+        Task {
+            do {
+                try await appState.addShowFromTMDB(searchResult: result, service: tmdbService)
+                dismiss()
+            } catch {
+                searchState = .error("Failed to load show: \(error.localizedDescription)")
+                addingShowId = nil
             }
         }
     }

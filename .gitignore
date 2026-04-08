@@ -1,0 +1,10 @@
+# Secret credentials — never commit
+fynch/Secrets.swift
+
+# Xcode
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+
+# macOS
+.DS_Store

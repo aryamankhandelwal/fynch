@@ -12,6 +12,8 @@ struct HomeView: View {
     @State private var showingAddSheet = false
     @State private var sortOrder: ShowSortOrder = .default
 
+    let tmdbService: TMDBService
+
     private var sortedShows: [Show] {
         switch sortOrder {
         case .default:
@@ -34,20 +36,30 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(sortedShows) { show in
-                    NavigationLink(value: show) {
-                        ShowRowView(
-                            show: show,
-                            isCompleted: appState.isCompleted(show),
-                            statusLabel: appState.statusLabel(for: show)
-                        )
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            appState.deleteShow(id: show.id)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
+            Group {
+                if appState.shows.isEmpty {
+                    ContentUnavailableView(
+                        "No shows yet",
+                        systemImage: "tv",
+                        description: Text("Tap + to search and add a show.")
+                    )
+                } else {
+                    List {
+                        ForEach(sortedShows) { show in
+                            NavigationLink(value: show) {
+                                ShowRowView(
+                                    show: show,
+                                    isCompleted: appState.isCompleted(show),
+                                    statusLabel: appState.statusLabel(for: show)
+                                )
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    appState.deleteShow(id: show.id)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                         }
                     }
                 }
@@ -87,7 +99,7 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $showingAddSheet) {
-                AddShowView()
+                AddShowView(tmdbService: tmdbService)
             }
             .animation(.easeInOut, value: appState.shows.map(\.id))
         }
