@@ -3,6 +3,7 @@ import SwiftUI
 struct ShowDetailView: View {
     let show: Show
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         List {
@@ -31,5 +32,16 @@ struct ShowDetailView: View {
         }
         .navigationTitle(show.title)
         .navigationBarTitleDisplayMode(.large)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .fontWeight(.semibold)
+                }
+            }
+        }
     }
 }
