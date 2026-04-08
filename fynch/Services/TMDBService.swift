@@ -68,7 +68,8 @@ actor TMDBService {
                             id: "tmdb-\(showDetail.id)-s\(n)e\(ep.episodeNumber)",
                             seasonNumber: n,
                             episodeNumber: ep.episodeNumber,
-                            title: ep.name
+                            title: ep.name,
+                            airDate: ep.airDate
                         )
                     }.sorted { $0.episodeNumber < $1.episodeNumber }
                     return Season(

@@ -5,6 +5,7 @@ struct Episode: Identifiable, Hashable, Codable {
     let seasonNumber: Int
     let episodeNumber: Int
     let title: String
+    let airDate: String?  // ISO "yyyy-MM-dd", nil if unknown
 }
 
 struct Season: Identifiable, Hashable, Codable {

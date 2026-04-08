@@ -8,7 +8,7 @@ struct ShowDetailView: View {
     var body: some View {
         List {
             ForEach(show.seasons.sorted(by: { $0.seasonNumber < $1.seasonNumber })) { season in
-                Section("Season \(season.seasonNumber)") {
+                Section {
                     ForEach(season.episodes.sorted(by: { $0.episodeNumber < $1.episodeNumber })) { episode in
                         EpisodeRowView(
                             episode: episode,
@@ -26,6 +26,21 @@ struct ShowDetailView: View {
                                 )
                             }
                         )
+                    }
+                } header: {
+                    HStack {
+                        Text("Season \(season.seasonNumber)")
+                        Spacer()
+                        let allWatched = appState.isSeasonWatched(showId: show.id, season: season)
+                        Button(allWatched ? "Deselect All" : "Select All") {
+                            if allWatched {
+                                appState.markSeasonUnwatched(showId: show.id, season: season)
+                            } else {
+                                appState.markSeasonWatched(showId: show.id, season: season)
+                            }
+                        }
+                        .font(.caption)
+                        .textCase(nil)
                     }
                 }
             }

@@ -18,10 +18,10 @@ struct EpisodeRowView: View {
                     .font(isNext ? .body.bold() : .body)
                     .foregroundStyle(isWatched && !isNext ? .secondary : .primary)
 
-                if isNext {
-                    Text("Up next")
+                if let dateString = formattedAirDate(episode.airDate) {
+                    Text(dateString)
                         .font(.caption2)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -35,5 +35,15 @@ struct EpisodeRowView: View {
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
         .padding(.vertical, 1)
+    }
+
+    private func formattedAirDate(_ iso: String?) -> String? {
+        guard let iso, !iso.isEmpty else { return nil }
+        let parser = DateFormatter()
+        parser.dateFormat = "yyyy-MM-dd"
+        guard let date = parser.date(from: iso) else { return nil }
+        let fmt = DateFormatter()
+        fmt.dateFormat = "MMM d, yyyy"
+        return fmt.string(from: date)
     }
 }

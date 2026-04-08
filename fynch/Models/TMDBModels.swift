@@ -38,4 +38,5 @@ struct TMDBEpisodeDTO: Decodable {
     let id: Int
     let episodeNumber: Int
     let name: String
+    let airDate: String?
 }

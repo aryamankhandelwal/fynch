@@ -65,6 +65,28 @@ final class AppState {
         PersistenceService.saveShows(shows)
     }
 
+    func markSeasonWatched(showId: String, season: Season) {
+        for episode in season.episodes {
+            let key = AppState.watchKey(showId: showId, season: season.seasonNumber, episode: episode.episodeNumber)
+            watchedStates[key] = true
+        }
+        PersistenceService.saveWatchedStates(watchedStates)
+    }
+
+    func markSeasonUnwatched(showId: String, season: Season) {
+        for episode in season.episodes {
+            let key = AppState.watchKey(showId: showId, season: season.seasonNumber, episode: episode.episodeNumber)
+            watchedStates[key] = false
+        }
+        PersistenceService.saveWatchedStates(watchedStates)
+    }
+
+    func isSeasonWatched(showId: String, season: Season) -> Bool {
+        season.episodes.allSatisfy {
+            isWatched(showId: showId, season: season.seasonNumber, episode: $0.episodeNumber)
+        }
+    }
+
     func deleteShow(id: String) {
         shows.removeAll { $0.id == id }
         watchedStates = watchedStates.filter { !$0.key.hasPrefix(id + "-") }
