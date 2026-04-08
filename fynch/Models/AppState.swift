@@ -3,22 +3,89 @@ import Observation
 
 @Observable
 final class AppState {
-    var shows: [Show] = PersistenceService.loadShows()
-    var watchedStates: [String: Bool] = PersistenceService.loadWatchedStates()
+    var shows: [Show] = []
+    var watchedStates: [String: Bool] = [:]
     var isAddingShow: Bool = false
     var isRefreshing: Bool = false
-    var isLoggedIn: Bool = false
+    var isRestoringSession: Bool = true
+    var currentUser: AuthSession? = nil
+
+    var isLoggedIn: Bool { currentUser != nil }
+
+    @ObservationIgnored private let authService: AuthService
+    @ObservationIgnored private let cloudService: CloudSyncService
+
+    init(authService: AuthService, cloudService: CloudSyncService) {
+        self.authService  = authService
+        self.cloudService = cloudService
+    }
 
     // MARK: - Auth
 
-    func login(username: String, password: String) -> Bool {
-        guard username == "arya", password == "password" else { return false }
-        isLoggedIn = true
-        return true
+    @MainActor
+    func signIn(username: String, password: String) async throws {
+        let session = try await authService.signIn(username: username, password: password)
+        currentUser = session
+        KeychainService.save(session)
+
+        // One-time migration of pre-multi-user data
+        let migrated = UserDefaults.standard.bool(forKey: "fynch.migrationCompleted")
+        if !migrated, let legacyShows = PersistenceService.loadLegacyShows() {
+            let legacyStates = PersistenceService.loadLegacyWatchedStates()
+            shows        = legacyShows
+            watchedStates = legacyStates
+            PersistenceService.saveShows(legacyShows, userId: session.userId)
+            PersistenceService.saveWatchedStates(legacyStates, userId: session.userId)
+            let userId   = session.userId
+            let idToken  = session.idToken
+            Task {
+                try? await cloudService.migrateData(
+                    shows: legacyShows,
+                    watchedStates: legacyStates,
+                    userId: userId,
+                    idToken: idToken
+                )
+                PersistenceService.clearLegacyData()
+                UserDefaults.standard.set(true, forKey: "fynch.migrationCompleted")
+            }
+        } else {
+            await loadUserData()
+        }
     }
 
-    func logout() {
-        isLoggedIn = false
+    /// Called on launch when a saved Keychain session is found.
+    @MainActor
+    func restoreSession(_ session: AuthSession) {
+        currentUser   = session
+        KeychainService.save(session)
+        shows         = PersistenceService.loadShows(userId: session.userId)
+        watchedStates = PersistenceService.loadWatchedStates(userId: session.userId)
+    }
+
+    /// Fetches fresh data from Firestore and merges into local state.
+    @MainActor
+    func loadUserData() async {
+        guard let session = currentUser else { return }
+        do {
+            async let cloudShows  = cloudService.loadShows(userId: session.userId, idToken: session.idToken)
+            async let cloudStates = cloudService.loadWatchedStates(userId: session.userId, idToken: session.idToken)
+            let (fetchedShows, fetchedStates) = try await (cloudShows, cloudStates)
+            shows         = fetchedShows
+            watchedStates = fetchedStates
+            PersistenceService.saveShows(fetchedShows, userId: session.userId)
+            PersistenceService.saveWatchedStates(fetchedStates, userId: session.userId)
+        } catch {
+            #if DEBUG
+            print("[fynch] loadUserData error: \(error)")
+            #endif
+        }
+    }
+
+    func signOut() {
+        shows         = []
+        watchedStates = [:]
+        currentUser   = nil
+        KeychainService.delete()
     }
 
     // MARK: - Key
@@ -60,9 +127,7 @@ final class AppState {
         return nil
     }
 
-    func isCompleted(_ show: Show) -> Bool {
-        nextEpisode(for: show) == nil
-    }
+    func isCompleted(_ show: Show) -> Bool { nextEpisode(for: show) == nil }
 
     func episodesRemaining(for show: Show) -> Int {
         show.seasons.reduce(0) { total, season in
@@ -76,8 +141,8 @@ final class AppState {
     func statusLabel(for show: Show) -> String {
         let remaining = episodesRemaining(for: show)
         switch remaining {
-        case 0: return "Caught up"
-        case 1: return "1 new episode"
+        case 0:  return "Caught up"
+        case 1:  return "1 new episode"
         default: return "\(remaining) new episodes"
         }
     }
@@ -87,29 +152,46 @@ final class AppState {
     func toggleWatched(showId: String, season: Int, episode: Int) {
         let key = AppState.watchKey(showId: showId, season: season, episode: episode)
         watchedStates[key] = !(watchedStates[key] ?? false)
-        PersistenceService.saveWatchedStates(watchedStates)
+        guard let session = currentUser else { return }
+        PersistenceService.saveWatchedStates(watchedStates, userId: session.userId)
+        let states  = watchedStates
+        let userId  = session.userId
+        let idToken = session.idToken
+        Task { try? await cloudService.saveWatchedStates(states, userId: userId, idToken: idToken) }
     }
 
     func addShow(_ show: Show) {
         guard !shows.contains(where: { $0.id == show.id }) else { return }
         shows.append(show)
-        PersistenceService.saveShows(shows)
+        guard let session = currentUser else { return }
+        PersistenceService.saveShows(shows, userId: session.userId)
+        let userId  = session.userId
+        let idToken = session.idToken
+        Task { try? await cloudService.saveShow(show, userId: userId, idToken: idToken) }
     }
 
     func markSeasonWatched(showId: String, season: Season) {
-        for episode in season.episodes {
-            let key = AppState.watchKey(showId: showId, season: season.seasonNumber, episode: episode.episodeNumber)
-            watchedStates[key] = true
+        for ep in season.episodes {
+            watchedStates[AppState.watchKey(showId: showId, season: season.seasonNumber, episode: ep.episodeNumber)] = true
         }
-        PersistenceService.saveWatchedStates(watchedStates)
+        guard let session = currentUser else { return }
+        PersistenceService.saveWatchedStates(watchedStates, userId: session.userId)
+        let states  = watchedStates
+        let userId  = session.userId
+        let idToken = session.idToken
+        Task { try? await cloudService.saveWatchedStates(states, userId: userId, idToken: idToken) }
     }
 
     func markSeasonUnwatched(showId: String, season: Season) {
-        for episode in season.episodes {
-            let key = AppState.watchKey(showId: showId, season: season.seasonNumber, episode: episode.episodeNumber)
-            watchedStates[key] = false
+        for ep in season.episodes {
+            watchedStates[AppState.watchKey(showId: showId, season: season.seasonNumber, episode: ep.episodeNumber)] = false
         }
-        PersistenceService.saveWatchedStates(watchedStates)
+        guard let session = currentUser else { return }
+        PersistenceService.saveWatchedStates(watchedStates, userId: session.userId)
+        let states  = watchedStates
+        let userId  = session.userId
+        let idToken = session.idToken
+        Task { try? await cloudService.saveWatchedStates(states, userId: userId, idToken: idToken) }
     }
 
     func isSeasonWatched(showId: String, season: Season) -> Bool {
@@ -121,8 +203,12 @@ final class AppState {
     func deleteShow(id: String) {
         shows.removeAll { $0.id == id }
         watchedStates = watchedStates.filter { !$0.key.hasPrefix(id + "-") }
-        PersistenceService.saveShows(shows)
-        PersistenceService.saveWatchedStates(watchedStates)
+        guard let session = currentUser else { return }
+        PersistenceService.saveShows(shows, userId: session.userId)
+        PersistenceService.saveWatchedStates(watchedStates, userId: session.userId)
+        let userId  = session.userId
+        let idToken = session.idToken
+        Task { try? await cloudService.deleteShow(showId: id, userId: userId, idToken: idToken) }
     }
 
     // MARK: - TMDB
@@ -132,7 +218,7 @@ final class AppState {
         isAddingShow = true
         defer { isAddingShow = false }
         let detail = try await service.fetchShowDetail(id: searchResult.id)
-        let show = try await service.buildShow(from: detail)
+        let show   = try await service.buildShow(from: detail)
         addShow(show)
     }
 
@@ -140,6 +226,7 @@ final class AppState {
 
     @MainActor
     func refreshAllShows(service: TMDBService, refreshService: RefreshService, isManual: Bool) async {
+        guard isLoggedIn else { return }
         if isManual { isRefreshing = true }
         defer { if isManual { isRefreshing = false } }
         let result = await refreshService.refreshStaleShows(in: shows, tmdbService: service, force: isManual)
@@ -153,11 +240,17 @@ final class AppState {
                 shows[idx] = updatedShow
             }
         }
-        if !result.updatedShows.isEmpty {
-            PersistenceService.saveShows(shows)
+        guard !result.updatedShows.isEmpty else { return }
+        guard let session = currentUser else { return }
+        PersistenceService.saveShows(shows, userId: session.userId)
+        let updated = result.updatedShows
+        let userId  = session.userId
+        let idToken = session.idToken
+        Task {
+            for show in updated {
+                try? await cloudService.saveShow(show, userId: userId, idToken: idToken)
+            }
         }
-        // Future notification hook:
-        // if result.totalNewEpisodes > 0 { scheduleNewEpisodeNotification(count: result.totalNewEpisodes) }
         #if DEBUG
         for (showId, error) in result.errors {
             print("[fynch] Refresh error for \(showId): \(error)")

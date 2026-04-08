@@ -14,7 +14,9 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if appState.isLoggedIn {
+            if appState.isRestoringSession {
+                Color(.systemBackground).ignoresSafeArea()
+            } else if appState.isLoggedIn {
                 TabView {
                     HomeView(tmdbService: tmdbService, refreshService: refreshService)
                         .tabItem { Label("My List", systemImage: "tv") }
@@ -28,6 +30,7 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: appState.isLoggedIn)
+        .animation(.easeInOut(duration: 0.2), value: appState.isRestoringSession)
     }
 }
 
@@ -36,5 +39,5 @@ struct ContentView: View {
         tmdbService: TMDBService(bearerToken: ""),
         refreshService: RefreshService()
     )
-    .environment(AppState())
+    .environment(AppState(authService: AuthService(), cloudService: CloudSyncService()))
 }

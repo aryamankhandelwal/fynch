@@ -2,9 +2,10 @@ import SwiftUI
 
 struct LoginView: View {
     @Environment(AppState.self) private var appState
-    @State private var username = ""
-    @State private var password = ""
+    @State private var username  = ""
+    @State private var password  = ""
     @State private var showError = false
+    @State private var isLoading = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -38,19 +39,36 @@ struct LoginView: View {
             }
 
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    let success = appState.login(username: username, password: password)
-                    showError = !success
+                guard !isLoading else { return }
+                isLoading = true
+                showError = false
+                Task {
+                    do {
+                        try await appState.signIn(username: username, password: password)
+                    } catch {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showError = true
+                        }
+                    }
+                    isLoading = false
                 }
             } label: {
-                Text("Sign In")
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                Group {
+                    if isLoading {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Text("Sign In")
+                            .font(.body.weight(.semibold))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.accentColor)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
+            .disabled(isLoading || username.isEmpty || password.isEmpty)
 
             Spacer()
             Spacer()

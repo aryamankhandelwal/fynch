@@ -7,14 +7,12 @@ struct ProfileView: View {
         NavigationStack {
             Form {
                 Section("Account") {
-                    profileRow(label: "Name", value: "Aryaman Khandelwal")
-                    profileRow(label: "Username", value: "arya")
-                    profileRow(label: "Password", value: "••••••••")
+                    profileRow(label: "Username", value: appState.currentUser?.username ?? "—")
                 }
 
                 Section {
                     Button("Log Out", role: .destructive) {
-                        appState.logout()
+                        appState.signOut()
                     }
                 }
             }
