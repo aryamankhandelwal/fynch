@@ -4,6 +4,7 @@ struct EpisodeRowView: View {
     let episode: Episode
     let isWatched: Bool
     let isNext: Bool
+    let isNextUnaired: Bool
     let onTap: () -> Void
 
     var body: some View {
@@ -19,9 +20,16 @@ struct EpisodeRowView: View {
                     .foregroundStyle(isWatched && !isNext ? .secondary : .primary)
 
                 if let dateString = formattedAirDate(episode.airDate) {
-                    Text(dateString)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Text(dateString)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        if isNextUnaired {
+                            Text("Up Next")
+                                .font(.caption2.bold())
+                                .foregroundStyle(.blue)
+                        }
+                    }
                 }
             }
 

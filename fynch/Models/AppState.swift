@@ -127,6 +127,15 @@ final class AppState {
         return nil
     }
 
+    func nextUnairedEpisode(for show: Show) -> Episode? {
+        for season in show.seasons.sorted(by: { $0.seasonNumber < $1.seasonNumber }) {
+            for episode in season.episodes.sorted(by: { $0.episodeNumber < $1.episodeNumber }) {
+                if !AppState.isAired(episode.airDate) { return episode }
+            }
+        }
+        return nil
+    }
+
     func isCompleted(_ show: Show) -> Bool { nextEpisode(for: show) == nil }
 
     func episodesRemaining(for show: Show) -> Int {
@@ -138,13 +147,22 @@ final class AppState {
         }
     }
 
+    func unairedEpisodesCount(for show: Show) -> Int {
+        show.seasons.reduce(0) { total, season in
+            total + season.episodes.filter { !AppState.isAired($0.airDate) }.count
+        }
+    }
+
     func statusLabel(for show: Show) -> String {
         let remaining = episodesRemaining(for: show)
-        switch remaining {
-        case 0:  return "Caught up"
-        case 1:  return "1 new episode"
-        default: return "\(remaining) new episodes"
+        if remaining == 0 {
+            let unaired = unairedEpisodesCount(for: show)
+            if unaired > 0 {
+                return "Caught up · \(unaired) left in season"
+            }
+            return "Caught up"
         }
+        return remaining == 1 ? "1 new episode" : "\(remaining) new episodes"
     }
 
     // MARK: - Mutations
@@ -198,6 +216,38 @@ final class AppState {
         season.episodes.allSatisfy {
             isWatched(showId: showId, season: season.seasonNumber, episode: $0.episodeNumber)
         }
+    }
+
+    func isShowFullyWatched(_ show: Show) -> Bool {
+        show.seasons.allSatisfy { isSeasonWatched(showId: show.id, season: $0) }
+    }
+
+    func markShowWatched(_ show: Show) {
+        for season in show.seasons {
+            for ep in season.episodes {
+                watchedStates[AppState.watchKey(showId: show.id, season: season.seasonNumber, episode: ep.episodeNumber)] = true
+            }
+        }
+        guard let session = currentUser else { return }
+        PersistenceService.saveWatchedStates(watchedStates, userId: session.userId)
+        let states  = watchedStates
+        let userId  = session.userId
+        let idToken = session.idToken
+        Task { try? await cloudService.saveWatchedStates(states, userId: userId, idToken: idToken) }
+    }
+
+    func markShowUnwatched(_ show: Show) {
+        for season in show.seasons {
+            for ep in season.episodes {
+                watchedStates[AppState.watchKey(showId: show.id, season: season.seasonNumber, episode: ep.episodeNumber)] = false
+            }
+        }
+        guard let session = currentUser else { return }
+        PersistenceService.saveWatchedStates(watchedStates, userId: session.userId)
+        let states  = watchedStates
+        let userId  = session.userId
+        let idToken = session.idToken
+        Task { try? await cloudService.saveWatchedStates(states, userId: userId, idToken: idToken) }
     }
 
     func deleteShow(id: String) {

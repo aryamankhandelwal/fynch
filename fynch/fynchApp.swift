@@ -35,7 +35,7 @@ struct fynchApp: App {
                     // Attempt to restore a saved session from Keychain on launch
                     if let saved = KeychainService.load() {
                         let session = (try? await authService.refreshIfNeeded(saved)) ?? saved
-                        await appState.restoreSession(session)
+                        appState.restoreSession(session)
                         await appState.loadUserData()
                     }
                     appState.isRestoringSession = false
