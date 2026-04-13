@@ -194,11 +194,11 @@ struct BulkAddView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(match.name)
-                    .font(.headline)
+                    .font(.msHeadline)
 
                 if results[i].query.lowercased() != match.name.lowercased() {
                     Text("\u{201C}\(results[i].query)\u{201D}")
-                        .font(.caption)
+                        .font(.msCaption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -232,12 +232,12 @@ struct BulkAddView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(match.name)
-                    .font(.headline)
+                    .font(.msHeadline)
                     .foregroundStyle(.secondary)
 
                 if results[i].query.lowercased() != match.name.lowercased() {
                     Text("\u{201C}\(results[i].query)\u{201D}")
-                        .font(.caption)
+                        .font(.msCaption)
                         .foregroundStyle(.tertiary)
                 }
             }

@@ -10,23 +10,23 @@ struct EpisodeRowView: View {
     var body: some View {
         HStack(spacing: 12) {
             Text("E\(episode.episodeNumber)")
-                .font(.caption.monospacedDigit())
+                .font(.msCaption)
                 .foregroundStyle(.secondary)
                 .frame(width: 28, alignment: .trailing)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(episode.title)
-                    .font(isNext ? .body.bold() : .body)
+                    .font(isNext ? .msBodyBold : .msBody)
                     .foregroundStyle(isWatched && !isNext ? .secondary : .primary)
 
                 if let dateString = formattedAirDate(episode.airDate) {
                     HStack(spacing: 4) {
                         Text(dateString)
-                            .font(.caption2)
+                            .font(.msCaption2)
                             .foregroundStyle(.secondary)
                         if isNext || isNextUnaired {
                             Text("Up Next")
-                                .font(.caption2.bold())
+                                .font(.msCaption2Bold)
                                 .foregroundStyle(.blue)
                         }
                     }

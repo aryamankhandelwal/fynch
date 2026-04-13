@@ -13,16 +13,16 @@ struct ShowRowView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(show.title)
-                        .font(.headline)
+                        .font(.msHeadline)
                     if let airDate = nextAirDate {
                         Text(airDate)
-                            .font(.caption)
+                            .font(.msCaption)
                             .foregroundStyle(.secondary)
                     }
                 }
 
                 Text(statusLabel)
-                    .font(.subheadline)
+                    .font(.msSubheadline)
                     .foregroundStyle(isCompleted ? .secondary : show.posterColor)
             }
 
@@ -50,7 +50,7 @@ struct ShowRowView: View {
                 .animation(.easeInOut(duration: 0.3), value: isCompleted)
 
             Text(show.title.prefix(1))
-                .font(.title2.bold())
+                .font(.msTitle2)
                 .foregroundStyle(isCompleted ? Color.secondary : Color.white)
                 .animation(.easeInOut(duration: 0.3), value: isCompleted)
         }

@@ -36,10 +36,9 @@ struct ProfileView: View {
     @ViewBuilder
     private func profileRow(label: String, value: String) -> some View {
         HStack {
-            Text(label)
+            Text(label).font(.msBody)
             Spacer()
-            Text(value)
-                .foregroundStyle(.secondary)
+            Text(value).font(.msBody).foregroundStyle(.secondary)
         }
     }
 }

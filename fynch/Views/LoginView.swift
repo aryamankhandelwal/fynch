@@ -12,7 +12,7 @@ struct LoginView: View {
             Spacer()
 
             Text("Bestiary")
-                .font(.system(size: 48, weight: .bold, design: .default))
+                .font(.lusitanaLargeTitle)
                 .foregroundStyle(.primary)
 
             Spacer().frame(height: 16)

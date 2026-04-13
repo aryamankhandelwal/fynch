@@ -95,7 +95,7 @@ struct AddShowView: View {
                     }
 
                 Text(result.name)
-                    .font(.headline)
+                    .font(.msHeadline)
 
                 Spacer()
 

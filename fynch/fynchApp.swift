@@ -31,6 +31,8 @@ struct fynchApp: App {
         let delegate = NotificationDelegate(appState: state)
         notificationDelegate = delegate
         UNUserNotificationCenter.current().delegate = delegate
+        BestiaryFonts.register()
+        BestiaryFonts.applyNavigationBarAppearance()
     }
 
     var body: some Scene {

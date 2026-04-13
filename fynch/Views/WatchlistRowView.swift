@@ -15,15 +15,15 @@ struct WatchlistRowView: View {
                     .fill(show.posterColor.gradient)
                     .frame(width: 48, height: 48)
                 Text(show.title.prefix(1))
-                    .font(.title2.bold())
+                    .font(.msTitle2)
                     .foregroundStyle(.white)
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(show.title)
-                    .font(.headline)
+                    .font(.msHeadline)
                 Text("\(unwatchedCount) episode\(unwatchedCount == 1 ? "" : "s")")
-                    .font(.subheadline)
+                    .font(.msSubheadline)
                     .foregroundStyle(.secondary)
             }
 
