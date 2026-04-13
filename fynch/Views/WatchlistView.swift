@@ -4,12 +4,17 @@ struct WatchlistView: View {
     @Environment(AppState.self) private var appState
     @State private var showingAddSheet = false
     @State private var showToMove: Show? = nil
+    @State private var searchText = ""
 
     let tmdbService: TMDBService
 
     var body: some View {
         NavigationStack {
             Group {
+                let filteredShows = searchText.isEmpty
+                    ? appState.watchlistShows
+                    : appState.watchlistShows.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+
                 if appState.watchlistShows.isEmpty {
                     ContentUnavailableView(
                         "Nothing queued",
@@ -18,7 +23,7 @@ struct WatchlistView: View {
                     )
                 } else {
                     List {
-                        ForEach(appState.watchlistShows) { show in
+                        ForEach(filteredShows) { show in
                             Button {
                                 showToMove = show
                             } label: {
@@ -50,6 +55,7 @@ struct WatchlistView: View {
                     }
                 }
             }
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search Watchlist")
             .sheet(isPresented: $showingAddSheet) {
                 AddShowView(tmdbService: tmdbService, destination: .watchlist)
             }

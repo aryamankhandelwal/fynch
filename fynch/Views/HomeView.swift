@@ -12,29 +12,33 @@ struct HomeView: View {
     @State private var navigationPath = NavigationPath()
     @State private var showingAddSheet = false
     @State private var sortOrder: ShowSortOrder = .default
+    @State private var searchText = ""
     // @State private var trayExpanded = false  // TODO: MVP — calendar tray disabled
 
     let tmdbService: TMDBService
     let refreshService: RefreshService
 
     private var sortedShows: [Show] {
+        let base: [Show]
         switch sortOrder {
         case .default:
-            return appState.myListShows
+            base = appState.myListShows
         case .alphabetical:
-            return appState.myListShows.sorted { $0.title < $1.title }
+            base = appState.myListShows.sorted { $0.title < $1.title }
         case .mostToWatch:
-            return appState.myListShows.sorted {
+            base = appState.myListShows.sorted {
                 appState.episodesRemaining(for: $0) > appState.episodesRemaining(for: $1)
             }
         case .caughtUpLast:
-            return appState.myListShows.sorted {
+            base = appState.myListShows.sorted {
                 let lhsDone = appState.isCompleted($0)
                 let rhsDone = appState.isCompleted($1)
                 if lhsDone == rhsDone { return false }
                 return !lhsDone
             }
         }
+        guard !searchText.isEmpty else { return base }
+        return base.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
     }
 
     var body: some View {
@@ -115,6 +119,7 @@ struct HomeView: View {
             .sheet(isPresented: $showingAddSheet) {
                 AddShowView(tmdbService: tmdbService, destination: .myList)
             }
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search My List")
             .animation(.easeInOut, value: appState.myListShows.map(\.id))
             .onChange(of: appState.pendingDeepLinkShowId) { _, newId in
                 guard let id = newId,
