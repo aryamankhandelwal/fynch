@@ -218,7 +218,6 @@ struct BulkAddView: View {
     // Non-interactive row for shows already in My List or Watchlist
     private func alreadyAddedRow(resultIndex i: Int) -> some View {
         let match = results[i].match!
-        let colorIndex = match.id % Show.palette.count
 
         return HStack(spacing: 14) {
             Circle()
