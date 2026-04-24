@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ProfileView: View {
     @Environment(AppState.self) private var appState
+    @Environment(SocialStore.self) private var socialStore
+    @State private var showClearFeedConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -16,20 +18,30 @@ struct ProfileView: View {
                     }
                 }
 
-                // #if DEBUG
-                // if let show = appState.shows.first {
-                //     Section("Debug") {
-                //         Button("Test Notification (\(show.title))") {
-                //             Task {
-                //                 await NotificationService.shared.scheduleTestNotification(for: show)
-                //             }
-                //         }
-                //     }
-                // }
-                // #endif
+                if appState.currentUsername == "arya" {
+                    Section {
+                        Button(role: .destructive) {
+                            showClearFeedConfirmation = true
+                        } label: {
+                            Label("Clear Feed", systemImage: "trash")
+                        }
+                    }
+                }
             }
             .navigationTitle("Bestiary")
             .navigationBarTitleDisplayMode(.inline)
+        }
+        .confirmationDialog(
+            "Clear All Feed Activity",
+            isPresented: $showClearFeedConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear", role: .destructive) {
+                socialStore.clearAllFeeds()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes all feed activity for every user. This cannot be undone.")
         }
     }
 

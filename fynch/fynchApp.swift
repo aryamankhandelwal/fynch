@@ -13,19 +13,22 @@ import UserNotifications
 struct fynchApp: App {
     private let authService: AuthService
     private let cloudService: CloudSyncService
+    private let socialSyncService: SocialSyncService
     private let tmdbService: TMDBService
     private let refreshService: RefreshService
     private let notificationDelegate: NotificationDelegate
     @State private var appState: AppState
+    @State private var socialStore = SocialStore()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let auth  = AuthService()
         let cloud = CloudSyncService()
-        authService    = auth
-        cloudService   = cloud
-        tmdbService    = TMDBService(bearerToken: Secrets.tmdbBearerToken)
-        refreshService = RefreshService()
+        authService       = auth
+        cloudService      = cloud
+        socialSyncService = SocialSyncService()
+        tmdbService       = TMDBService(bearerToken: Secrets.tmdbBearerToken)
+        refreshService    = RefreshService()
         let state = AppState(authService: auth, cloudService: cloud)
         _appState = State(wrappedValue: state)
         let delegate = NotificationDelegate(appState: state)
@@ -39,14 +42,37 @@ struct fynchApp: App {
         WindowGroup {
             ContentView(tmdbService: tmdbService, refreshService: refreshService)
                 .environment(appState)
+                .environment(socialStore)
+                .preferredColorScheme(.dark)
                 .task {
-                    // Attempt to restore a saved session from Keychain on launch
+                    appState.socialStore = socialStore
                     if let saved = KeychainService.load() {
                         let session = (try? await authService.refreshIfNeeded(saved)) ?? saved
                         appState.restoreSession(session)
                         await appState.loadUserData()
                     }
                     appState.isRestoringSession = false
+                }
+                .onChange(of: appState.currentUser?.userId) { _, newUserId in
+                    if let userId = newUserId, let session = appState.currentUser {
+                        socialStore.socialSyncService = socialSyncService
+                        socialStore.currentUserId    = userId
+                        socialStore.currentUsername  = session.username
+                        socialStore.currentIdToken   = session.idToken
+                        Task {
+                            await socialSyncService.saveUserProfile(
+                                userId: userId,
+                                username: session.username,
+                                idToken: session.idToken
+                            )
+                            await socialStore.loadFromFirestore()
+                        }
+                    } else {
+                        // Signed out — clear social identity
+                        socialStore.currentUserId   = ""
+                        socialStore.currentUsername = ""
+                        socialStore.currentIdToken  = ""
+                    }
                 }
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -93,7 +119,6 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         self.appState = appState
     }
 
-    // Show banner + play sound even when the app is foregrounded
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -102,7 +127,6 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         completionHandler([.banner, .sound])
     }
 
-    // Handle tap: extract showId and set pending deep link
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,

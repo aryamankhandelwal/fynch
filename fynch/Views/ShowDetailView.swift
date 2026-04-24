@@ -86,7 +86,7 @@ struct ShowDetailView: View {
                             if allWatched {
                                 appState.markSeasonUnwatched(showId: show.id, season: season)
                             } else {
-                                appState.markSeasonWatched(showId: show.id, season: season)
+                                appState.markSeasonWatched(show: show, season: season)
                             }
                         }
                         .font(.caption)

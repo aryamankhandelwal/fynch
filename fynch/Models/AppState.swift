@@ -18,6 +18,9 @@ final class AppState {
 
     var pendingDeepLinkShowId: String? = nil
 
+    var currentUsername: String { currentUser?.username ?? "" }
+
+    @ObservationIgnored var socialStore: SocialStore? = nil
     @ObservationIgnored private let authService: AuthService
     @ObservationIgnored private let cloudService: CloudSyncService
     @ObservationIgnored private let notificationService = NotificationService.shared
@@ -228,13 +231,43 @@ final class AppState {
 
     func toggleWatched(showId: String, season: Int, episode: Int) {
         let key = AppState.watchKey(showId: showId, season: season, episode: episode)
-        watchedStates[key] = !(watchedStates[key] ?? false)
+        let wasWatched = watchedStates[key] ?? false
+        watchedStates[key] = !wasWatched
         guard let session = currentUser else { return }
         PersistenceService.saveWatchedStates(watchedStates, userId: session.userId)
         let states  = watchedStates
         let userId  = session.userId
         let idToken = session.idToken
         Task { try? await cloudService.saveWatchedStates(states, userId: userId, idToken: idToken) }
+
+        // Social feed: log when marking as watched (not unwatching)
+        if !wasWatched, let store = socialStore,
+           let show = shows.first(where: { $0.id == showId }) {
+            logSingleEpisodeWatched(store: store, show: show, seasonNum: season, episodeNum: episode)
+        }
+    }
+
+    private func logSingleEpisodeWatched(store: SocialStore, show: Show, seasonNum: Int, episodeNum: Int) {
+        guard let season = show.seasons.first(where: { $0.seasonNumber == seasonNum }),
+              let episode = season.episodes.first(where: { $0.episodeNumber == episodeNum }) else { return }
+        let sortedSeasons  = show.seasons.sorted { $0.seasonNumber < $1.seasonNumber }
+        let sortedEpisodes = season.episodes.sorted { $0.episodeNumber < $1.episodeNumber }
+        let isFirst = sortedSeasons.first?.seasonNumber == seasonNum &&
+                      sortedEpisodes.first?.episodeNumber == episodeNum
+        let isLastOfSeason = sortedEpisodes.last?.episodeNumber == episodeNum
+        let isLastOfShow   = isLastOfSeason && sortedSeasons.last?.seasonNumber == seasonNum
+        store.logWatchedEpisodes(
+            username: currentUsername,
+            showId: show.id,
+            showName: show.title,
+            season: seasonNum,
+            episode: episodeNum,
+            count: 1,
+            lastEpisodeTitle: episode.title,
+            isFirstEpisodeOfShow: isFirst,
+            isLastOfSeason: isLastOfSeason,
+            isLastOfShow: isLastOfShow
+        )
     }
 
     func addShow(_ show: Show) {
@@ -275,9 +308,13 @@ final class AppState {
         Task { try? await cloudService.saveWatchlistedIds(ids, userId: userId, idToken: idToken) }
     }
 
-    func markSeasonWatched(showId: String, season: Season) {
+    func markSeasonWatched(show: Show, season: Season) {
+        let prevUnwatched = season.episodes.filter { ep in
+            AppState.isAired(ep.airDate) &&
+            !(watchedStates[AppState.watchKey(showId: show.id, season: season.seasonNumber, episode: ep.episodeNumber)] ?? false)
+        }
         for ep in season.episodes {
-            watchedStates[AppState.watchKey(showId: showId, season: season.seasonNumber, episode: ep.episodeNumber)] = true
+            watchedStates[AppState.watchKey(showId: show.id, season: season.seasonNumber, episode: ep.episodeNumber)] = true
         }
         guard let session = currentUser else { return }
         PersistenceService.saveWatchedStates(watchedStates, userId: session.userId)
@@ -285,9 +322,27 @@ final class AppState {
         let userId  = session.userId
         let idToken = session.idToken
         Task { try? await cloudService.saveWatchedStates(states, userId: userId, idToken: idToken) }
+
+        if !prevUnwatched.isEmpty, let store = socialStore {
+            let sortedSeasons = show.seasons.sorted { $0.seasonNumber < $1.seasonNumber }
+            let isLastOfShow  = sortedSeasons.last?.seasonNumber == season.seasonNumber
+            let lastEp = prevUnwatched.sorted { $0.episodeNumber < $1.episodeNumber }.last
+            store.logWatchedEpisodes(
+                username: currentUsername,
+                showId: show.id,
+                showName: show.title,
+                season: season.seasonNumber,
+                episode: nil,
+                count: prevUnwatched.count,
+                lastEpisodeTitle: lastEp?.title,
+                isFirstEpisodeOfShow: false,
+                isLastOfSeason: true,
+                isLastOfShow: isLastOfShow
+            )
+        }
     }
 
-    func markSeasonUnwatched(showId: String, season: Season) {
+    func markSeasonUnwatched(showId: String, season: Season) { // no social logging for unwatching
         for ep in season.episodes {
             watchedStates[AppState.watchKey(showId: showId, season: season.seasonNumber, episode: ep.episodeNumber)] = false
         }
@@ -310,6 +365,12 @@ final class AppState {
     }
 
     func markShowWatched(_ show: Show) {
+        let prevUnwatchedCount = show.seasons.reduce(0) { total, season in
+            total + season.episodes.filter { ep in
+                AppState.isAired(ep.airDate) &&
+                !(watchedStates[AppState.watchKey(showId: show.id, season: season.seasonNumber, episode: ep.episodeNumber)] ?? false)
+            }.count
+        }
         for season in show.seasons {
             for ep in season.episodes {
                 watchedStates[AppState.watchKey(showId: show.id, season: season.seasonNumber, episode: ep.episodeNumber)] = true
@@ -321,6 +382,23 @@ final class AppState {
         let userId  = session.userId
         let idToken = session.idToken
         Task { try? await cloudService.saveWatchedStates(states, userId: userId, idToken: idToken) }
+
+        if prevUnwatchedCount > 0, let store = socialStore {
+            let lastSeason = show.seasons.max { $0.seasonNumber < $1.seasonNumber }
+            let lastEp     = lastSeason?.episodes.max { $0.episodeNumber < $1.episodeNumber }
+            store.logWatchedEpisodes(
+                username: currentUsername,
+                showId: show.id,
+                showName: show.title,
+                season: lastSeason?.seasonNumber ?? 1,
+                episode: nil,
+                count: prevUnwatchedCount,
+                lastEpisodeTitle: lastEp?.title,
+                isFirstEpisodeOfShow: false,
+                isLastOfSeason: true,
+                isLastOfShow: true
+            )
+        }
     }
 
     func markShowUnwatched(_ show: Show) {

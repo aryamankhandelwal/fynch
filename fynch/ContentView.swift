@@ -25,9 +25,12 @@ struct ContentView: View {
                     WatchlistView(tmdbService: tmdbService)
                         .tabItem { Label("Watchlist", systemImage: "bookmark") }
                         .tag(1)
+                    CombinedFeedView()
+                        .tabItem { Label("Feed", systemImage: "person.2") }
+                        .tag(2)
                     ProfileView()
                         .tabItem { Label("Profile", systemImage: "person.circle") }
-                        .tag(2)
+                        .tag(3)
                 }
                 .transition(.opacity)
                 .onChange(of: appState.pendingDeepLinkShowId) { _, newId in
@@ -49,4 +52,5 @@ struct ContentView: View {
         refreshService: RefreshService()
     )
     .environment(AppState(authService: AuthService(), cloudService: CloudSyncService()))
+    .environment(SocialStore())
 }
