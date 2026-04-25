@@ -71,6 +71,7 @@ struct CombinedFeedView: View {
                 }
             }
         }
+        .textInputAutocapitalization(.never)
         .sheet(isPresented: $showNotifications) {
             NotificationsSheet()
         }

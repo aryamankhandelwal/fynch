@@ -21,42 +21,38 @@ actor SocialSyncService {
 
     /// Returns all registered usernames that contain `prefix`, excluding `currentUsername`.
     func searchUsers(prefix: String, currentUsername: String, idToken: String) async -> [UserProfile] {
-        let url = URL(string: "\(base)/userProfiles")!
-        var req = URLRequest(url: url)
-        req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
-        guard let (data, response) = try? await URLSession.shared.data(for: req) else { return [] }
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        #if DEBUG
-        print("[SocialSyncService] searchUsers status: \(status)")
-        #endif
-        if status == 404 { return [] }
-        guard status == 200 else { return [] }
-        let json = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
-        let docs = json["documents"] as? [[String: Any]] ?? []
-        #if DEBUG
-        print("[SocialSyncService] searchUsers documents count: \(docs.count)")
-        #endif
         let query = prefix.lowercased()
-        let fromList = docs
-            .compactMap { decode(UserProfile.self, from: $0) }
-            .filter { $0.username != currentUsername && $0.username.localizedCaseInsensitiveContains(query) }
-            .sorted { $0.username < $1.username }
+        guard !query.isEmpty else { return [] }
 
-        // Fallback: if collection list returned nothing (e.g. restrictive security rules),
-        // try a direct document fetch by exact username.
-        if fromList.isEmpty && !query.isEmpty {
-            let directUrl = URL(string: "\(base)/userProfiles/\(query)")!
-            var directReq = URLRequest(url: directUrl)
-            directReq.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
-            if let (directData, directResp) = try? await URLSession.shared.data(for: directReq),
-               (directResp as? HTTPURLResponse)?.statusCode == 200,
-               let singleDoc = try? JSONSerialization.jsonObject(with: directData) as? [String: Any],
-               let profile = decode(UserProfile.self, from: singleDoc),
-               profile.username != currentUsername {
-                return [profile]
-            }
+        // 1. Try listing the whole collection (succeeds only if security rules permit it)
+        var fromList: [UserProfile] = []
+        let listUrl = URL(string: "\(base)/userProfiles")!
+        var listReq = URLRequest(url: listUrl)
+        listReq.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        if let (data, response) = try? await URLSession.shared.data(for: listReq),
+           (response as? HTTPURLResponse)?.statusCode == 200,
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let docs = json["documents"] as? [[String: Any]] {
+            fromList = docs
+                .compactMap { decode(UserProfile.self, from: $0) }
+                .filter { $0.username != currentUsername && $0.username.localizedCaseInsensitiveContains(query) }
+                .sorted { $0.username < $1.username }
         }
-        return fromList
+        if !fromList.isEmpty { return fromList }
+
+        // 2. Fallback: direct document fetch by exact lowercased username.
+        //    This handles restrictive security rules that block collection listing.
+        let directUrl = URL(string: "\(base)/userProfiles/\(query)")!
+        var directReq = URLRequest(url: directUrl)
+        directReq.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        if let (directData, directResp) = try? await URLSession.shared.data(for: directReq),
+           (directResp as? HTTPURLResponse)?.statusCode == 200,
+           let singleDoc = try? JSONSerialization.jsonObject(with: directData) as? [String: Any],
+           let profile = decode(UserProfile.self, from: singleDoc),
+           profile.username != currentUsername {
+            return [profile]
+        }
+        return []
     }
 
     // MARK: - Feed Events
@@ -90,7 +86,7 @@ actor SocialSyncService {
         var req = URLRequest(url: url)
         req.httpMethod = "DELETE"
         req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
-        try? await URLSession.shared.data(for: req)
+        _ = try? await URLSession.shared.data(for: req)
     }
 
     func deleteAllFeedEvents(forUsername username: String, idToken: String) async {
@@ -130,7 +126,7 @@ actor SocialSyncService {
         var req = URLRequest(url: url)
         req.httpMethod = "DELETE"
         req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
-        try? await URLSession.shared.data(for: req)
+        _ = try? await URLSession.shared.data(for: req)
     }
 
     // MARK: - Friendships
